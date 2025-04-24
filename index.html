@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>密码生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .password-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .password {
+            font-size: 18px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            word-break: break-all;
+            flex-grow: 1;
+            padding-right: 10px;
+        }
+        .copy-btn {
+            margin-top: 0;
+            width: 20%;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        .copy-btn:hover {
+            background-color: #0b7dda;
+        }
+        .copy-btn.copied {
+            background-color: #4CAF50;
+        }
+        .requirements {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>密码生成器</h1>
+        <div class="form-group">
+            <label for="website">网站/服务名称：</label>
+            <input type="text" id="website" placeholder="例如：google.com/知乎">
+        </div>
+        <div class="form-group">
+            <label for="salt">盐值（自定义密钥）：</label>
+            <input type="text" id="salt" placeholder="输入你的专属盐值">
+            <div class="requirements">提示：盐值可以是任意字符串，建议使用容易记住但别人猜不到的短语</div>
+        </div>
+        <button id="generate-btn">生成密码</button>
+        
+        <div class="result" id="result" style="display: none;">
+            <div class="password-container">
+                <div class="password" id="password"></div>
+                <button class="copy-btn" id="copy-btn">复制</button>
+            </div>
+            <div class="requirements">密码规则：8位长度，包含大小写字母、数字和特殊符号(!@#$%&*)，且以字母开头</div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('generate-btn').addEventListener('click', function() {
+            const website = document.getElementById('website').value.trim();
+            const salt = document.getElementById('salt').value.trim();
+            
+            if (!website || !salt) {
+                alert('请输入网站名称和盐值！');
+                return;
+            }
+            
+            const password = generatePassword(website, salt);
+            document.getElementById('password').textContent = password;
+            document.getElementById('result').style.display = 'block';
+        });
+
+        document.getElementById('copy-btn').addEventListener('click', function() {
+            const password = document.getElementById('password').textContent;
+            const copyBtn = document.getElementById('copy-btn');
+            
+            navigator.clipboard.writeText(password).then(function() {
+                copyBtn.textContent = '已复制！';
+                copyBtn.classList.add('copied');
+                setTimeout(function() {
+                    copyBtn.textContent = '复制';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            });
+        });
+
+        function generatePassword(website, salt) {
+            const specialChars = ['!', '@', '#', '$', '%', '&', '*'];
+            const hash = CryptoJS.SHA256(website + salt);
+            const bytes = hash.words.flatMap(word => [
+                (word >> 24) & 0xFF,
+                (word >> 16) & 0xFF,
+                (word >> 8) & 0xFF,
+                word & 0xFF
+            ]);
+
+            // 强制首字符为字母
+            const firstChar = bytes[0] % 2 === 0 ?
+                String.fromCharCode(65 + (bytes[1] % 26)) :  // 大写字母
+                String.fromCharCode(97 + (bytes[1] % 26));   // 小写字母
+
+            // 生成剩余字符（确保包含所有类型）
+            const remainingChars = [];
+            const charTypes = ['lower', 'upper', 'number', 'special'];
+            const usedTypes = new Set();
+
+            for (let i = 2; i < 8; i++) {
+                const byte = bytes[i];
+                let char;
+                
+                if (i < 6) {
+                    const neededType = charTypes.find(t => !usedTypes.has(t));
+                    switch (neededType) {
+                        case 'lower':
+                            char = String.fromCharCode(97 + (byte % 26));
+                            usedTypes.add('lower');
+                            break;
+                        case 'upper':
+                            char = String.fromCharCode(65 + (byte % 26));
+                            usedTypes.add('upper');
+                            break;
+                        case 'number':
+                            char = String.fromCharCode(48 + (byte % 10));
+                            usedTypes.add('number');
+                            break;
+                        case 'special':
+                            char = specialChars[byte % 7];
+                            usedTypes.add('special');
+                            break;
+                    }
+                } else {
+                    const type = charTypes[byte % 4];
+                    switch (type) {
+                        case 'lower': char = String.fromCharCode(97 + (byte % 26)); break;
+                        case 'upper': char = String.fromCharCode(65 + (byte % 26)); break;
+                        case 'number': char = String.fromCharCode(48 + (byte % 10)); break;
+                        case 'special': char = specialChars[byte % 7]; break;
+                    }
+                }
+                remainingChars.push(char);
+            }
+
+            // 洗牌（保持首字符不动）
+            const password = [firstChar, ...remainingChars];
+            for (let i = 7; i > 1; i--) {
+                const j = 1 + (bytes[i] % 6);
+                [password[i], password[j]] = [password[j], password[i]];
+            }
+
+            return password.slice(0, 8).join('');
+        }
+    </script>
+</body>
+</html>
