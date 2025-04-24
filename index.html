@@ -62,20 +62,27 @@
         .password-container {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 10px;
             margin-bottom: 10px;
+        }
+        .password-wrapper {
+            flex-grow: 1;
+            min-width: 0;
         }
         .password {
             font-size: 18px;
             font-weight: bold;
             letter-spacing: 1px;
             word-break: break-all;
-            flex-grow: 1;
-            padding-right: 10px;
+            padding: 8px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            line-height: 1.4;
         }
         .copy-btn {
+            width: 79px;
             margin-top: 0;
-            width: 20%;
             background-color: #2196F3;
             color: white;
             border: none;
@@ -84,6 +91,8 @@
             cursor: pointer;
             font-size: 14px;
             white-space: nowrap;
+            height: 40px;
+            flex-shrink: 0;
         }
         .copy-btn:hover {
             background-color: #0b7dda;
@@ -96,6 +105,39 @@
             color: #666;
             margin-top: 5px;
         }
+        /* 滑块样式 */
+        .slider-container {
+            margin: 20px 0;
+        }
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #ddd;
+            outline: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        .slider-value {
+            text-align: center;
+            font-weight: bold;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -103,35 +145,53 @@
         <h1>密码生成器</h1>
         <div class="form-group">
             <label for="website">网站/服务名称：</label>
-            <input type="text" id="website" placeholder="例如：google.com/知乎">
+            <input type="text" id="website" placeholder="例如：google.com/小红书 ">
         </div>
         <div class="form-group">
             <label for="salt">盐值（自定义密钥）：</label>
             <input type="text" id="salt" placeholder="输入你的专属盐值">
             <div class="requirements">提示：盐值可以是任意字符串，建议使用容易记住但别人猜不到的短语</div>
         </div>
+        
+        <!-- 密码长度滑块 -->
+        <div class="slider-container">
+            <label for="length-slider">密码长度：<span id="length-value">8</span></label>
+            <input type="range" min="6" max="20" value="8" class="slider" id="length-slider">
+        </div>
+        
         <button id="generate-btn">生成密码</button>
         
         <div class="result" id="result" style="display: none;">
             <div class="password-container">
-                <div class="password" id="password"></div>
+                <div class="password-wrapper">
+                    <div class="password" id="password"></div>
+                </div>
                 <button class="copy-btn" id="copy-btn">复制</button>
             </div>
-            <div class="requirements">密码规则：8位长度，包含大小写字母、数字和特殊符号(!@#$%&*)，且以字母开头</div>
+            <div class="requirements">密码规则：包含大小写字母、数字和特殊符号(!@#$%&*)，且以字母开头</div>
         </div>
     </div>
 
     <script>
+        // 滑块值显示
+        const lengthSlider = document.getElementById('length-slider');
+        const lengthValue = document.getElementById('length-value');
+        
+        lengthSlider.addEventListener('input', function() {
+            lengthValue.textContent = this.value;
+        });
+
         document.getElementById('generate-btn').addEventListener('click', function() {
             const website = document.getElementById('website').value.trim();
             const salt = document.getElementById('salt').value.trim();
+            const length = parseInt(lengthSlider.value);
             
             if (!website || !salt) {
                 alert('请输入网站名称和盐值！');
                 return;
             }
             
-            const password = generatePassword(website, salt);
+            const password = generatePassword(website, salt, length);
             document.getElementById('password').textContent = password;
             document.getElementById('result').style.display = 'block';
         });
@@ -150,7 +210,7 @@
             });
         });
 
-        function generatePassword(website, salt) {
+        function generatePassword(website, salt, length) {
             const specialChars = ['!', '@', '#', '$', '%', '&', '*'];
             const hash = CryptoJS.SHA256(website + salt);
             const bytes = hash.words.flatMap(word => [
@@ -165,55 +225,61 @@
                 String.fromCharCode(65 + (bytes[1] % 26)) :  // 大写字母
                 String.fromCharCode(97 + (bytes[1] % 26));   // 小写字母
 
+            // 计算每种字符类型的最小数量
+            const minSpecial = Math.max(1, Math.floor(length * 0.15));
+            const minNumbers = Math.max(1, Math.floor(length * 0.15));
+            const minLower = Math.max(1, Math.floor(length * 0.2));
+            const minUpper = Math.max(1, Math.floor(length * 0.2));
+            
             // 生成剩余字符（确保包含所有类型）
             const remainingChars = [];
-            const charTypes = ['lower', 'upper', 'number', 'special'];
-            const usedTypes = new Set();
-
-            for (let i = 2; i < 8; i++) {
-                const byte = bytes[i];
+            const charTypes = [
+                ...Array(minLower).fill('lower'),
+                ...Array(minUpper).fill('upper'),
+                ...Array(minNumbers).fill('number'),
+                ...Array(minSpecial).fill('special'),
+                ...Array(length - 1 - minLower - minUpper - minNumbers - minSpecial).fill('random')
+            ];
+            
+            // 随机打乱字符类型顺序（除首字符外）
+            for (let i = charTypes.length - 1; i > 0; i--) {
+                const j = bytes[i % bytes.length] % (i + 1);
+                [charTypes[i], charTypes[j]] = [charTypes[j], charTypes[i]];
+            }
+            
+            // 生成每个字符
+            for (let i = 0; i < charTypes.length; i++) {
+                const type = charTypes[i];
+                const byte = bytes[(i + 2) % bytes.length];
                 let char;
                 
-                if (i < 6) {
-                    const neededType = charTypes.find(t => !usedTypes.has(t));
-                    switch (neededType) {
-                        case 'lower':
-                            char = String.fromCharCode(97 + (byte % 26));
-                            usedTypes.add('lower');
-                            break;
-                        case 'upper':
-                            char = String.fromCharCode(65 + (byte % 26));
-                            usedTypes.add('upper');
-                            break;
-                        case 'number':
-                            char = String.fromCharCode(48 + (byte % 10));
-                            usedTypes.add('number');
-                            break;
-                        case 'special':
-                            char = specialChars[byte % 7];
-                            usedTypes.add('special');
-                            break;
-                    }
-                } else {
-                    const type = charTypes[byte % 4];
-                    switch (type) {
-                        case 'lower': char = String.fromCharCode(97 + (byte % 26)); break;
-                        case 'upper': char = String.fromCharCode(65 + (byte % 26)); break;
-                        case 'number': char = String.fromCharCode(48 + (byte % 10)); break;
-                        case 'special': char = specialChars[byte % 7]; break;
-                    }
+                switch (type) {
+                    case 'lower':
+                        char = String.fromCharCode(97 + (byte % 26));
+                        break;
+                    case 'upper':
+                        char = String.fromCharCode(65 + (byte % 26));
+                        break;
+                    case 'number':
+                        char = String.fromCharCode(48 + (byte % 10));
+                        break;
+                    case 'special':
+                        char = specialChars[byte % 7];
+                        break;
+                    default: // random
+                        const randomType = ['lower', 'upper', 'number', 'special'][byte % 4];
+                        switch (randomType) {
+                            case 'lower': char = String.fromCharCode(97 + (byte % 26)); break;
+                            case 'upper': char = String.fromCharCode(65 + (byte % 26)); break;
+                            case 'number': char = String.fromCharCode(48 + (byte % 10)); break;
+                            case 'special': char = specialChars[byte % 7]; break;
+                        }
                 }
                 remainingChars.push(char);
             }
 
-            // 洗牌（保持首字符不动）
-            const password = [firstChar, ...remainingChars];
-            for (let i = 7; i > 1; i--) {
-                const j = 1 + (bytes[i] % 6);
-                [password[i], password[j]] = [password[j], password[i]];
-            }
-
-            return password.slice(0, 8).join('');
+            // 组合密码
+            return [firstChar, ...remainingChars].slice(0, length).join('');
         }
     </script>
 </body>
